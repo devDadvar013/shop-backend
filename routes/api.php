@@ -31,7 +31,6 @@ Route::get('/run-migrations', function () {
 });
 Route::get('/force-reset', function () {
     try {
-        // استفاده از db:wipe برای پاک کردن کامل
         Artisan::call('db:wipe', ['--force' => true]);
         
         // سپس migrate
@@ -46,6 +45,19 @@ Route::get('/force-reset', function () {
             'status' => 'error',
             'message' => $e->getMessage()
         ], 500);
+    }
+});
+
+Route::get('/create-admin-user', function () {
+    try {
+        $user = \App\Models\User::create([
+            'name' => 'Admin',
+            'email' => 'admin@admin.com',
+            'password' => bcrypt('password'),
+        ]);
+        return response()->json(['status' => 'success', 'email' => 'admin@admin.com', 'password' => 'password']);
+    } catch (\Exception $e) {
+        return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
     }
 });
 // ================================
