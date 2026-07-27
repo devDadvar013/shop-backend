@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Artisan; // <-- اضافه کنید
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,5 +37,13 @@ class AppServiceProvider extends ServiceProvider
                 ], 429);
             });
         });
+
+        if (app()->environment('production')) {
+            try {
+                Artisan::call('migrate', ['--force' => true]);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Migration failed: ' . $e->getMessage());
+            }
+        }
     }
 }
