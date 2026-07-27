@@ -48,6 +48,26 @@ Route::get('/force-reset', function () {
         ], 500);
     }
 });
+ute::get('/reset-db', function () {
+    try {
+        DB::statement('DROP SCHEMA IF EXISTS public CASCADE;');
+        DB::statement('CREATE SCHEMA public;');
+        DB::statement('GRANT ALL ON SCHEMA public TO public;');
+        
+        Artisan::call('migrate:fresh', ['--force' => true]);
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Database reset successfully!',
+            'output' => Artisan::output()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
 // ================================
 
 Route::get('/health', function () {
