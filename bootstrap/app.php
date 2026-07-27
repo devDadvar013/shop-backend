@@ -14,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // statefulApi() disabled — this is a stateless token API
+        // (Sanctum personal access tokens via Authorization: Bearer header).
+        // Re-enable only if migrating to Sanctum SPA session-based auth.
         // $middleware->statefulApi();
         $middleware->throttleApi();
     })
