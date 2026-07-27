@@ -29,6 +29,25 @@ Route::get('/run-migrations', function () {
         ], 500);
     }
 });
+Route::get('/force-reset', function () {
+    try {
+        // استفاده از db:wipe برای پاک کردن کامل
+        Artisan::call('db:wipe', ['--force' => true]);
+        
+        // سپس migrate
+        Artisan::call('migrate', ['--force' => true]);
+        
+        return response()->json([
+            'status' => 'success',
+            'output' => Artisan::output()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
 // ================================
 
 Route::get('/health', function () {
