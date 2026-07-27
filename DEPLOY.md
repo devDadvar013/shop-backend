@@ -1,111 +1,86 @@
-# 🚀 Deploy to Render + Neon (Free)
+# Deploy notes
 
-## Architecture
+## Cache driver — `file` (not `database`)
+
+Production runs with **`CACHE_STORE=file`** across all three env templates
+(`.env`, `.env.example`, `.env.production`) and the Render service
+(`render.yaml`).
+
+### Why
+The `cache` table was never migrated on the Neon Postgres database, which
+caused every request hitting the `throttle:login` or `throttle:api`
+middleware to fail with:
 
 ```
-┌──────────────────┐         ┌──────────────────┐
-│  Render (Free)   │ ──────► │   Neon (Free)    │
-│  Laravel API     │  HTTPS  │   PostgreSQL     │
-│  shop-backend    │  port   │   neondb         │
-│  Frankfurt, EU   │  5432   │   Ohio, US       │
-└──────────────────┘         └──────────────────┘
+SQLSTATE[42P01]: Undefined table: 7 ERROR: relation "cache" does not exist
 ```
 
-## Step 1 — Push to GitHub
+The `file` driver needs no DB table and is fine for the only thing this
+app uses cache for (rate limiting).
 
+### Trade-off
+On Render's free tier the filesystem is ephemeral — cache (and rate-limit
+counters) is wiped on every restart/deploy. For this project that's
+acceptable: users just get a fresh `60/min` allowance on the next boot.
+
+### Switching back to `database`
+Only do this **after** the table actually exists on the target DB. Steps:
+
+1. Temporarily set `CACHE_STORE=file` in `render.yaml` (already the case).
+2. Deploy once so the entrypoint can run all migrations, including
+   `2024_01_01_000001_create_cache_table.php`.
+3. Verify with `psql ... -c "\dt cache"` that the table exists.
+4. Then change `CACHE_STORE` to `database` in `render.yaml` and redeploy.
+
+---
+
+## Migrations on Render
+
+### The bug we fixed
+`Dockerfile` used to run `php artisan migrate --force --no-interaction || true`
+**during the Docker build**. Render only injects env vars (`DB_URL`, etc.) at
+container start, not at build time, so:
+
+- The build had no DB credentials.
+- The `|| true` swallowed the error.
+- The container shipped to Render with no migrations applied to Neon.
+- Every cache-related request then 500'd.
+
+### The fix
+1. Removed the build-time migration from `Dockerfile`.
+2. Moved it into `docker-entrypoint.sh`, which runs at container start
+   when env vars are resolved.
+3. The entrypoint logs migration failures loudly but does NOT crash the
+   container — `/api/health` keeps responding so the service stays up
+   while you investigate DB issues.
+
+### Sanity-check after deploy
 ```bash
-cd shop-backend
-git init
-git add .
-git commit -m "feat: ready for Render + Neon deploy"
-git remote add origin https://github.com/devDadvar013/shop-backend.git
-git push -u origin main
+# Hit health
+curl https://<your-service>.onrender.com/api/health
+
+# Then trigger a login and watch the logs — should NOT 500.
 ```
 
-## Step 2 — Get your APP_KEY
+---
 
-```bash
-php artisan key:generate --show
+## ⚠️ Security: hardcoded database credentials
+
+`render.yaml` and `.env.production` both contain a real Neon password
+in plain text. This file is safe to commit to a **private** repo, but
+do NOT push it to a public GitHub repo.
+
+**Recommended:**
+- In `render.yaml`, change the `DB_URL` line to `sync: false` and set
+  the value in the Render dashboard under Environment → Secret Files
+  (or Environment Variables → marked as "secret").
+- Keep `render.yaml` committed but with the value redacted.
+
+```yaml
+# Safer alternative for render.yaml
+- key: DB_URL
+  sync: false   # set the real value in Render dashboard
 ```
 
-Copy the output (starts with `base64:`).
-
-## Step 3 — Create Render Web Service
-
-1. Go to https://dashboard.render.com → **New +** → **Web Service**
-2. Connect GitHub → select `shop-backend` repo
-3. Fill the form:
-
-| Field | Value |
-|-------|-------|
-| Name | `shop-backend` |
-| Language | `Docker` |
-| Branch | `main` |
-| Region | `Frankfurt` |
-| Instance Type | `Free` |
-
-4. Click **Advanced** → set **Health Check Path** to `/api/health`
-
-5. Click **Add Environment Variable** for each of these:
-
-```
-APP_ENV=production
-APP_DEBUG=false
-APP_KEY=base64:paste_your_key_here
-APP_URL=https://shop-backend.onrender.com
-LOG_CHANNEL=stderr
-DB_CONNECTION=pgsql
-DB_URL=postgresql://neondb_owner:npg_N9slr2hOIYKQ@ep-raspy-heart-axxo4vd6-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-SESSION_DRIVER=array
-CACHE_STORE=database
-QUEUE_CONNECTION=sync
-```
-
-6. Click **Create Web Service**
-
-## Step 4 — Wait & test
-
-Render will build the Docker image (3-5 min first time), then deploy.
-
-Test:
-```bash
-curl https://shop-backend.onrender.com/api/health
-```
-
-## ⚠️ Free tier notes
-
-- Render sleeps after 15 min idle → first request takes 30-50s
-- Neon also sleeps after ~5 min idle → first DB query takes 1-2s
-- Combined cold start: ~30-60s on first request
-- Use https://cron-job.org to ping `/api/health` every 14 min to keep awake
-
-## 🔧 What's in this repo
-
-- `Dockerfile` — PHP 8.3 + Apache + Laravel (with pgsql support)
-- `docker-entrypoint.sh` — handles Render's dynamic `$PORT`
-- `.dockerignore` — keeps Docker build small
-- `render.yaml` — Render Blueprint
-- `.env.production` — env vars for Render (DB_URL already filled)
-- `bootstrap/app.php` — CSRF fix (statefulApi disabled)
-- `config/database.php` — pgsql connection added
-- `config/cors.php` — token API friendly (no credentials)
-
-## 🐛 Troubleshooting
-
-**"could not find driver" on pgsql?**
-- The Dockerfile installs `pdo_pgsql` — should work.
-
-**"SQLSTATE[08006]" connection error?**
-- Make sure `DB_URL` is correctly pasted (no extra spaces, no missing parts).
-
-**Migrations didn't run?**
-- They run during Docker build with `|| true` (silent failure).
-- Check Render build log for "migrate" output.
-
-**"CSRF token mismatch"?**
-- The fix is already applied (`statefulApi()` disabled).
-- Make sure you deployed the latest version with the fix.
-
-## 📝 Region note
-
-Your Neon project is in **US East (Ohio)**. Render is in **Frankfurt (EU)**. Latency is fine (~100ms) for a portfolio project. If you want them in the same region, recreate the Neon project in EU Central (Frankfurt) and update the connection string.
+Also rotate the Neon password in the Neon console if this repo has ever
+been public.

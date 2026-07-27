@@ -36,8 +36,12 @@ RUN php artisan storage:link || true
 RUN php artisan config:clear || true
 RUN php artisan route:clear || true
 
-# Run migrations during build (safe — ignores failure)
-RUN php artisan migrate --force --no-interaction || true
+# Migrations are NOT run at build time on purpose:
+# Render's envVars are only available at container start, not during
+# the Docker build. Running `php artisan migrate` here would silently
+# fail (no DB credentials yet) and the `|| true` would hide it,
+# leaving the production database without tables.
+# Migrations now run from docker-entrypoint.sh at container start.
 
 # Permissions
 RUN chown -R www-data:www-data /var/www/html \
