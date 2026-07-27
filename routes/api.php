@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Artisan;
 
 Route::get('/run-migrations', function () {
     try {
-        Artisan::call('migrate', ['--force' => true]);
+        Artisan::call('migrate:fresh', ['--force' => true]);
         return response()->json([
             'status' => 'success',
             'output' => Artisan::output()
