@@ -29,6 +29,7 @@ Route::get('/run-migrations', function () {
         ], 500);
     }
 });
+
 Route::get('/force-reset', function () {
     try {
         Artisan::call('db:wipe', ['--force' => true]);
@@ -58,6 +59,21 @@ Route::get('/create-admin-user', function () {
         return response()->json(['status' => 'success', 'email' => 'admin@shop.io', 'password' => 'password']);
     } catch (\Exception $e) {
         return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+    }
+});
+
+Route::get('/seed-data', function () {
+    try {
+        Artisan::call('db:seed', ['--force' => true]);
+        return response()->json([
+            'status' => 'success',
+            'output' => Artisan::output()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
     }
 });
 // ================================
