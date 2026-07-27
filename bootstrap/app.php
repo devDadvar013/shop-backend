@@ -14,7 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->statefulApi();
+        // $middleware->statefulApi();
         $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {
