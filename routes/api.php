@@ -52,10 +52,10 @@ Route::get('/create-admin-user', function () {
     try {
         $user = \App\Models\User::create([
             'name' => 'Admin',
-            'email' => 'admin@admin.com',
+            'email' => 'admin@shop.io',
             'password' => bcrypt('password'),
         ]);
-        return response()->json(['status' => 'success', 'email' => 'admin@admin.com', 'password' => 'password']);
+        return response()->json(['status' => 'success', 'email' => 'admin@shop.io', 'password' => 'password']);
     } catch (\Exception $e) {
         return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
     }
